@@ -4,7 +4,7 @@ A slicer module which preforms video based hand eye calibration of a system cons
 
 Download/Setup Instruction:
 
-unfinished
+- unfinished
 - download OpenIGTLinkIF slicer module through slicer's extension manager
 
 
