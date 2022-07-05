@@ -1,5 +1,6 @@
 # VideoBasedHandEye
-Video based hand eye calibration slicer module
+
+A slicer module which preforms video based hand eye calibration of a system consisting of a webcam and optical tracker
 
 Download/Setup Instruction:
 
