@@ -753,12 +753,14 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
     #Format input matricies and output rotation and translational calibration matrix
     StylusTipCoords = np.vstack(( StylusTipCoordsX, StylusTipCoordsY, StylusTipCoordsZ))
-    print (StylusTipCoords)
+    np.savetxt("C:/D/VideoCameraCalibrationModule/Output Images/StylusTipCoordsOutput.txt", StylusTipCoords, delimiter =", ", newline = "\n \n")
+    # print (StylusTipCoords)
 
     CircleCenters = np.vstack(( CircleCentersX, CircleCentersY))
-    print(CircleCenters)
+    np.savetxt("C:/D/VideoCameraCalibrationModule/Output Images/CircleCentersOutput.txt", CircleCenters, delimiter =", ", newline = "\n \n")
+    # print(CircleCenters)
 
-    print(newcameramtx)
+    # print(newcameramtx)
 
     R,t = self.hand_eye_p2l(StylusTipCoords, CircleCenters, newcameramtx)
     calibration = np.vstack((np.hstack((R,t)),[0,0,0,1]))
