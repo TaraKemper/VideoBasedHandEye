@@ -7,7 +7,7 @@ from slicer.util import VTKObservationMixin
 import cv2
 import numpy as np
 import math
-
+import pathlib
 
 #
 # HandEyeCalibration
@@ -105,6 +105,15 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
+    
+    self.saveFolder = pathlib.Path(__file__).parent.resolve()
+    # Create all necessary folders
+    os.makedirs(os.path.join(self.saveFolder, "OutputImages"), exist_ok=True)
+    os.makedirs(os.path.join(self.saveFolder, "OutputImages", "Validation"), exist_ok=True)
+    os.makedirs(os.path.join(self.saveFolder, "OutputImages", "Checkerboards"), exist_ok=True)
+    os.makedirs(os.path.join(self.saveFolder, "OutputImages", "UndistortedCheckerboards"), exist_ok=True)
+    os.makedirs(os.path.join(self.saveFolder, "OutputImages", "Undistortion"), exist_ok=True)
+    os.makedirs(os.path.join(self.saveFolder, "OutputImages", "CircleDetection"), exist_ok=True)
 
   def UpdateTransforms(self, caller, event):
     print("TEST1")
@@ -160,9 +169,6 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     Called when the application closes and the module widget is destroyed.
     """
     self.removeObservers()
-
-	
-	
 
   def enter(self):
     """
@@ -300,19 +306,15 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
       traceback.print_exc()
 
   def testFunction(self):
-    print("HelloWorld")
     self.logic.logicTestFunction()
 
   def AnalyzeVideo(self):
-    print('got to setup')
     self.logic.logicAnalyzeVideo("Frames", "Transforms")
 
   def DistortionCalibration(self):
-    print('distortion calibration')
     self.logic.logicDistortionCalibration("Checkerboards")
 
   def TemporalCalibration(self):
-    print('temporal calibration')
     self.logic.logicTemporalCalibration()
 
 
@@ -335,6 +337,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     Called when the logic class is instantiated. Can be used for initializing member variables.
     """
     ScriptedLoadableModuleLogic.__init__(self)
+    self.saveFolder = pathlib.Path(__file__).parent.resolve()
 
   def setDefaultParameters(self, parameterNode):
     """
@@ -385,9 +388,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
         # Draw and display the corners
         cv2.drawChessboardCorners(img, (7, 5), corners2, ret)
-        cv2.imwrite(
-          "C:/d/HandEyeCalibrationExtension/HandEyeCalibration/Output Images/Checkerboards/frame%d.jpg" % count,
-          img)
+        _savePath = os.path.join(self.saveFolder, "OutputImages", "Checkerboards", "frame"+str(count)+".png")
+        cv2.imwrite(_savePath, img)
 
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], None, None)
 
@@ -403,9 +405,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       img = cv2.undistort(img, mtx, dist, None, newcameramtx)
 
       # save raw undistorted image (check)
-      cv2.imwrite(
-        "C:/d/HandEyeCalibrationExtension/HandEyeCalibration/Output Images/Undistorted Checkerboards/frame%d.jpg" % count,
-        img)
+      _savePath = os.path.join(self.saveFolder, "OutputImages", "UndistortedCheckerboards", "frame"+str(count)+".png")
+      cv2.imwrite(_savePath, img)
 
     return mtx, dist
 
@@ -624,12 +625,16 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     Read through video frame by frame and analyze each using colour thresholding and hough transform
     same as original function except applying a binary mask after colour thresholding to improve accuracy of circle detection
     """
-    print('got to logic func')
-
     a = slicer.util.getNode(Frames)
 
-    markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
-    #marksupNode.SetName("OpticalPoints")
+    markupsNode = None
+    try:
+      markupsNode = slicer.util.getNode("HECFiducials")
+      # Clear the list
+      markupsNode.RemoveAllControlPoints()
+    except:
+      markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
+      markupsNode.SetName("HECFiducials")
 
     StylusTipCoordsX = ([])
     StylusTipCoordsY = ([])
@@ -639,15 +644,11 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     CircleCentersY = ([])
 
     #mtx, dist = self.logicDistortionCalibration("Checkerboards")
-
-	
     #mtx = np.array([[622.97040331 0. 322.60669888], [0. 619.81629638 239.44681572], [ 0. 0. 1. ])
     mtx = np.array([[622.97040331, 0, 322.60669888], [0, 619.81629638, 239.44681572], [0, 0, 1]]);
-	
     dist = np.array([1.10517578e-01, -2.65829231e-01, -1.90690252e-05, 7.00236680e-05, 1.39000650e-01])
-	
+
     for count in range(a.GetNumberOfDataNodes()):
-      # print('frame %d imported' % count)
       img = a.GetNthDataNode(count)
       img = slicer.util.arrayFromVolume(img)
       img = img[0,::-1,::-1,:]
@@ -659,9 +660,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       img = cv2.undistort(img, mtx, dist, None, newcameramtx)
 
       ## save raw undistorted image (check)
-      #cv2.imwrite(
-      #  "C:/D/VideoCameraCalibrationModule/Output Images/Undistortion/frame%d.jpg" % count,
-      #  img)
+      #_savePath = os.path.join(self.saveFolder, "OutputImages", "Undistortion", "frame"+str(count)+".png")
+      #cv2.imwrite(_savePath, img)
 
       # Colour Threshold for green
       hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -678,9 +678,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       circles = cv2.HoughCircles(blurred, cv2.HOUGH_GRADIENT, 0.1, 1000, param1=50, param2=30, minRadius=0, maxRadius=1000)
 
       # save thresholded image (binary or blurred) which the hough transform is being applied to (check)
-      cv2.imwrite(
-        "C:/D/VideoCameraCalibrationModule/Output Images/Undistortion/frame%d.jpg" % count,
-        blurred)
+      _savePath = os.path.join(self.saveFolder, "OutputImages", "Undistortion", "frame"+str(count)+".png")
+      cv2.imwrite(_savePath, blurred)
         
       c = vtk.vtkMatrix4x4()
       slicer.util.getNode(Transforms).GetNthDataNode(count).GetMatrixTransformToWorld(c)
@@ -689,13 +688,11 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       z = c.GetElement(2, 3)
 
       # draw fiducials following spatial tracking for visual validation
-      markupsNode = slicer.util.getNode("MarkupsFiducial")
       markupsNode.AddFiducial(x,y,z)
 
       # Draw Calculated Circle
       if circles is None:
-        print('no circles detected in frame %d' % count)
-
+        print('No circles detected in frame %d' % count)
       else:
         # Convert the circle parameters a, b and r to integers.
         circles = np.uint16(np.around(circles))
@@ -721,7 +718,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
         #if else statement to deal with when no elements have yet been appended and thus checking if the last element of the list matches the one being appended results in an error
         if len(StylusTipCoordsX)>0:
           if StylusTipCoordsX[len(StylusTipCoordsX)-1] == x:
-            print("spatial tracking lost in frame %d" % count)
+            print("Spatial tracking lost in frame %d" % count)
           else:
             #add circle centers to list
             CircleCentersX = np.append(CircleCentersX, center[0])
@@ -733,9 +730,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
             StylusTipCoordsZ = np.append(StylusTipCoordsZ, z)
 
             # Write new image to output file with circles drawn
-            cv2.imwrite(
-              "C:/D/VideoCameraCalibrationModule/Output Images/Circle Detection/frame%d.jpg" % count,
-              img)
+            _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleDetection", "frame"+str(count)+".png")
+            cv2.imwrite(_savePath, img)
         else:
           # add circle centers to list
           CircleCentersX = np.append(CircleCentersX, center[0])
@@ -747,17 +743,18 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
           StylusTipCoordsZ = np.append(StylusTipCoordsZ, z)
 
           # Write new image to output file with circles drawn
-          cv2.imwrite(
-            "C:/D/VideoCameraCalibrationModule/Output Images/Circle Detection/frame%d.jpg" % count,
-            img)
+          _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleDetection", "frame"+str(count)+".png")
+          cv2.imwrite(_savePath, img)
 
     #Format input matricies and output rotation and translational calibration matrix
     StylusTipCoords = np.vstack(( StylusTipCoordsX, StylusTipCoordsY, StylusTipCoordsZ))
-    np.savetxt("C:/D/VideoCameraCalibrationModule/Output Images/StylusTipCoordsOutput.txt", StylusTipCoords, delimiter =", ", newline = "\n \n")
+    _savePath = os.path.join(self.saveFolder, "OutputImages", "StylusTipCoordsOutput.txt")
+    np.savetxt(_savePath, StylusTipCoords, delimiter =", ", newline = "\n \n")
     # print (StylusTipCoords)
 
     CircleCenters = np.vstack(( CircleCentersX, CircleCentersY))
-    np.savetxt("C:/D/VideoCameraCalibrationModule/Output Images/CircleCentersOutput.txt", CircleCenters, delimiter =", ", newline = "\n \n")
+    _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleCentersOutput.txt")
+    np.savetxt(_savePath, CircleCenters, delimiter =", ", newline = "\n \n")
     # print(CircleCenters)
 
     # print(newcameramtx)
@@ -767,26 +764,27 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     # print(calibration)
     
 
-    print(" ")
+    print("")
 
     pixels,pixelErrors = self.PixelValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
-    print("average pixel error:", (sum(pixelErrors)/pixelErrors.shape[0])[0], "pixels")
+    print("Average pixel error:", "%.2f pixels" % (sum(pixelErrors)/pixelErrors.shape[0])[0])
 
     distanceErrors = self.DistanceValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
-    print("average distance error:", (sum(distanceErrors) / distanceErrors.shape[0])[0], "mm")
+    print("Average distance error:", "%.2f mm" % (sum(distanceErrors) / distanceErrors.shape[0])[0])
 
     angularErrors = self.AngularValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
-    print("average angular error:", (sum(angularErrors) / angularErrors.shape[0])[0], "degrees")
+    print("Average angular error:", "%.2f degrees" % (sum(angularErrors) / angularErrors.shape[0])[0])
 
     for i in range(len(pixels)):
       try:
-        img = cv2.imread("C:/D/VideoCameraCalibrationModule/Output Images/Circle Detection/frame%d.jpg" % i)
-        if pixels[i] != "null":
+        _filePath = os.path.join(self.saveFolder, "OutputImages", "CircleDetection", "frame"+str(i)+".png")
+        img = cv2.imread(_filePath)
+        if pixels[i][0] != -1:
           cv2.circle(img, (pixels[i][0], pixels[i][1]), 1, (0, 255, 255), 2)
-          cv2.imwrite(
-            'C:/D/VideoCameraCalibrationModule/Output Images/Validation/frame%d.jpg' % i, img)
+          _filePath = os.path.join(self.saveFolder, "OutputImages", "Validation", "frame"+str(i)+".png")
+          cv2.imwrite(_filePath, img)
       except:
-        pixels.insert(i-1, "null")
+        pixels.insert(i-1, np.array([[-1],[-1],[-1]]))
 
 
 
