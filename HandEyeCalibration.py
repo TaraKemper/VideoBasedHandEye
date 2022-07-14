@@ -328,7 +328,6 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     
 ##########################################################################
 
-
 #
 # HandEyeCalibrationLogic
 #
