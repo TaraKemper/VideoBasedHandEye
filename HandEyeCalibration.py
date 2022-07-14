@@ -20,10 +20,10 @@ class HandEyeCalibration(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "HandEyeCalibration"  # TODO: make this more human readable by adding spaces
-    self.parent.categories = ["Examples"]  # TODO: set categories (folders where the module shows up in the module selector)
+    self.parent.title = "Hand Eye Calibration"  # TODO: make this more human readable by adding spaces
+    self.parent.categories = ["IGT"]  # TODO: set categories (folders where the module shows up in the module selector)
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["John Doe (AnyWare Corp.)"]  # TODO: replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Tara Kemper (Robarts Research Institute)"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
@@ -155,11 +155,15 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
     # Buttons
     self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
+    
+    ##############################################
 
     # self.ui.pushButton.connect('clicked(bool)', self.testFunction)
     self.ui.pushButton.connect('clicked(bool)', self.AnalyzeVideo)
     self.ui.DistortionButton.connect('clicked(bool)', self.DistortionCalibration)
     self.ui.TemporalButton.connect('clicked(bool)', self.TemporalCalibration)
+    
+    ##############################################
 
     # Make sure parameter node is initialized (needed for module reload)
     self.initializeParameterNode()
@@ -307,6 +311,11 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
   def testFunction(self):
     self.logic.logicTestFunction()
+    
+##########################################################################
+  #
+  # Call functions
+  #
 
   def AnalyzeVideo(self):
     self.logic.logicAnalyzeVideo("Frames", "Transforms")
@@ -316,6 +325,8 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
   def TemporalCalibration(self):
     self.logic.logicTemporalCalibration()
+    
+##########################################################################
 
 
 #
@@ -351,7 +362,11 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
   def logicTestFunction(self):
     print ("Logic goes here")
 
-
+#############################################################################################
+  #
+  # Undistortion and Temporal
+  #
+    
   def logicDistortionCalibration(self, Checkerboards):
     """
     Logic function to preform a distortion calibration for the camera
@@ -424,6 +439,11 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
     print(y1)
     print(y2)
+    
+##############################################################################################
+  #
+  # Hand Eye Calibration Methods:
+  #
 
   def hand_eye_p2l(self, X, Q, A, tol=0.001):
     """
@@ -472,6 +492,140 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       E_old = E
 
     return R, t
+  
+  def cameraCombinedCalibration2(P_2D, P_3D):
+    """
+     Performed a combine camera calibration (both the intrinsic and extrinsic
+     (i.e. hand-eye) based on corresponding 2D pixels and 3D points.
+
+     Inputs:  P_2D - 2xN pixel coordinates
+              P_3D - 3xN 3D coordinates, it is assumed that each 3D points is
+              projected to the image plane, thus there is a known
+              correspondence between P_2D and P_3D
+
+     Outputs: M_int_est, estimated camera intrinsic parameters:
+                       = [ fx 0 cx
+                           0 fy cy
+                           0  0  1 ]
+              M_ext_est, estimate camera extrinsic parameters (i.e. hand-eye)
+                       = [ R_3x3, t_3x1
+                               0  1 ]
+    """
+
+    # space allocation for outposts
+    M_int_est = np.identity(3)
+    M_ext_est = np.identity(4)
+
+    # size of the input
+    N = P_2D.shape[1]
+    if P_2D.shape[1] == P_3D.shape[1]:
+
+      # construct the system of linear equations
+      # A = np.zeros((2*N,12))
+      A = np.empty((0, 12))
+      for i in range(N):
+        a = np.array([[P_3D[0, i], P_3D[1, i], P_3D[2, i], 1, 0, 0, 0, 0, -P_2D[0, i] * P_3D[0, i],
+                       -P_2D[0, i] * P_3D[1, i], -P_2D[0, i] * P_3D[2, i], -P_2D[0, i]]])
+        b = np.array([[0, 0, 0, 0, P_3D[0, i], P_3D[1, i], P_3D[2, i], 1, -P_2D[1, i] * P_3D[0, i],
+                       -P_2D[1, i] * P_3D[1, i], -P_2D[1, i] * P_3D[2, i], -P_2D[1, i]]])
+
+        c = np.vstack((a, b))
+        A = np.vstack((A, c))
+
+      # The answer is the eigen vector corresponding to the single zero eivenvalue of the matrix (A' * A)
+      D, V = la.eig(A.conj().T @ A)
+      min_idx = np.where(D == min(D))[0][0]
+      m = V[:, 10]
+
+      # note that m is arranged as:
+      # m = [ m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34]
+      # rearrange to form:
+      # m = [ m11 m12 m13 m14 ;
+      #       m21 m22 m23 m24 ;
+      #       m31 m32 m33 m34 ];
+
+      m = np.reshape(m, (3, 4))
+
+      # m is known as the projection matrix, basically it is the intrinsic matrix multiplied with the extrinsic (hand-eye calibration) matrix
+      # The first step to resolve intrinsic/extrinsic matrices from m is to find the scaling factor. Note that the last row [m31 m32 m33] is the last row of the rotation matrix R, thus one can find the scale there
+      gamma = np.absolute(np.linalg.norm(m[2, 0:3]))
+
+      # determining the translation in Z and the sign of sigma
+      gamma_sign = np.sign(m[2, 3])
+      gamma_sign = 1
+
+      # due to the way we construct our viewing axis, we know that the objects must be IN FRONT of the camera, thus the translation must always be POSITIVE in the Z direction
+      M = gamma_sign / gamma * m
+      M_proj = M
+
+      # translation in z
+      Tz = M[2, 3]
+
+      # third row of the rotation matrix
+      M_ext_est[2, :] = M[2, :]
+
+      # principal points
+      ox = np.dot(M[0, 0:3], M[2, 0:3])
+      oy = np.dot(M[1, 0:3], M[2, 0:3])
+
+      # focal points
+      fx = np.sqrt(np.dot(M[0, 0:3], M[0, 0:3]) - ox * ox)
+      fy = np.sqrt(np.dot(M[1, 0:3], M[1, 0:3]) - oy * oy)
+
+      # construct the output
+      M_int_est[0, 2] = ox
+      M_int_est[1, 2] = oy
+      M_int_est[0, 0] = fx
+      M_int_est[1, 1] = fy
+
+      # 1st row of the rotation matrix
+      M_ext_est[0, 0:3] = gamma_sign / fx * (ox * M[2, 0:3] - M[0, 0:3])
+
+      # 2nd row of the rotation matrix
+      M_ext_est[1, 0:3] = gamma_sign / fy * (oy * M[2, 0:3] - M[1, 0:3])
+
+      # translation in x
+      M_ext_est[0, 3] = gamma_sign / fx * (ox * Tz - M[0, 3])
+
+      # translation in y
+      M_ext_est[1, 3] = gamma_sign / fy * (oy * Tz - M[1, 3])
+
+      M_ext_est_neg = copy(M_ext_est)
+      M_ext_est_neg[0, :] = -1 * M_ext_est_neg[0, :]
+      M_ext_est_neg[1, :] = -1 * M_ext_est_neg[1, :]
+
+      if (np.linalg.norm(M_int_est @ M_ext_est[0:3, :] - M_proj, 'fro')) > (
+      np.linalg.norm(M_int_est @ M_ext_est_neg[0:3, :] - M_proj, 'fro')):
+        M_ext_est = copy(M_ext_est_neg)
+
+      # given the 3x4 projection matrix M, calculate the projection error between the paired 2D/3D fiducials
+      m, n = np.shape(P_3D)
+
+      # calculate the projection of P3D given M
+      temp = M @ np.vstack((P_3D, np.ones((1, n))))
+      P = np.zeros((2, n))
+      P[0, :] = temp[0, :] / temp[2, :]
+      P[1, :] = temp[1, :] / temp[2, :]
+
+      # mean projection error, i.e. euclidean distance between P3D after projection from P2D
+      p = P - P_2D
+      fre = []
+      for i in range(n):
+        x = np.linalg.norm(p[:, i])
+        fre.append(x)
+
+      fre = np.sum(fre) / n
+
+    else:
+      print("error: 2D and 3D matricies of different lengths")
+
+    return M_int_est, M_ext_est, M_proj, fre
+
+
+####################################################################################
+  #
+  # Validations (Average Errors)
+  #
 
   def PixelValidation(self, T, X, Q, A):
     """
@@ -620,6 +774,12 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     angularErrors = np.reshape(angularErrors, ((X.shape[1], 1)))
     return angularErrors
 
+  
+##################################################################################################
+  #
+  # Module logic (what happens when you press analyze)
+  #
+  
   def logicAnalyzeVideo(self, Frames, Transforms):
     """
     Read through video frame by frame and analyze each using colour thresholding and hough transform
@@ -750,18 +910,23 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     StylusTipCoords = np.vstack(( StylusTipCoordsX, StylusTipCoordsY, StylusTipCoordsZ))
     _savePath = os.path.join(self.saveFolder, "OutputImages", "StylusTipCoordsOutput.txt")
     np.savetxt(_savePath, StylusTipCoords, delimiter =", ", newline = "\n \n")
-    # print (StylusTipCoords)
 
     CircleCenters = np.vstack(( CircleCentersX, CircleCentersY))
     _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleCentersOutput.txt")
     np.savetxt(_savePath, CircleCenters, delimiter =", ", newline = "\n \n")
-    # print(CircleCenters)
 
-    # print(newcameramtx)
+    #set calibration method (make choosable in module eventually)
+    CalibrationMethod = 1
 
-    R,t = self.hand_eye_p2l(StylusTipCoords, CircleCenters, newcameramtx)
-    calibration = np.vstack((np.hstack((R,t)),[0,0,0,1]))
-    # print(calibration)
+    #preform hand eye calibration
+    if CalibrationMethod == 1:
+      R,t = self.hand_eye_p2l(StylusTipCoords, CircleCenters, newcameramtx)
+      calibration = np.vstack((np.hstack((R,t)),[0,0,0,1]))
+      print(calibration)
+    elif CalibrationMethod == 2:
+      M_int_est, M_ext_est, M_proj, fre = cameraCombinedCalibration2(CircleCenters,StylusTipCoords)
+      calibration = M_ext_est
+      print(calibration)
     
 
     print("")
@@ -786,8 +951,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       except:
         pixels.insert(i-1, np.array([[-1],[-1],[-1]]))
 
-
-
+        
+#####################################################################################################
 
 
 
