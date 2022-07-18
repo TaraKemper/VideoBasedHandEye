@@ -8,6 +8,11 @@ import cv2
 import numpy as np
 import math
 import pathlib
+import scipy
+import scipy.linalg as la
+from copy import copy
+import scipy.io as sio
+
 
 #
 # HandEyeCalibration
@@ -105,7 +110,8 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     self.logic = None
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
-    
+
+    #############
     self.saveFolder = pathlib.Path(__file__).parent.resolve()
     # Create all necessary folders
     os.makedirs(os.path.join(self.saveFolder, "OutputImages"), exist_ok=True)
@@ -114,6 +120,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "UndistortedCheckerboards"), exist_ok=True)
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "Undistortion"), exist_ok=True)
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "CircleDetection"), exist_ok=True)
+    #############
 
   def UpdateTransforms(self, caller, event):
     print("TEST1")
@@ -147,7 +154,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    +self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
     self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
     self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
@@ -162,6 +169,8 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     self.ui.pushButton.connect('clicked(bool)', self.AnalyzeVideo)
     self.ui.DistortionButton.connect('clicked(bool)', self.DistortionCalibration)
     self.ui.TemporalButton.connect('clicked(bool)', self.TemporalCalibration)
+
+    #self.ui.methodSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.)
     
     ##############################################
 
@@ -492,7 +501,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
     return R, t
   
-  def cameraCombinedCalibration2(P_2D, P_3D):
+  def cameraCombinedCalibration2(self, P_2D, P_3D):
     """
      Performed a combine camera calibration (both the intrinsic and extrinsic
      (i.e. hand-eye) based on corresponding 2D pixels and 3D points.
@@ -520,7 +529,6 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     if P_2D.shape[1] == P_3D.shape[1]:
 
       # construct the system of linear equations
-      # A = np.zeros((2*N,12))
       A = np.empty((0, 12))
       for i in range(N):
         a = np.array([[P_3D[0, i], P_3D[1, i], P_3D[2, i], 1, 0, 0, 0, 0, -P_2D[0, i] * P_3D[0, i],
@@ -534,7 +542,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       # The answer is the eigen vector corresponding to the single zero eivenvalue of the matrix (A' * A)
       D, V = la.eig(A.conj().T @ A)
       min_idx = np.where(D == min(D))[0][0]
-      m = V[:, 10]
+      m = V[:, min_idx]
 
       # note that m is arranged as:
       # m = [ m11 m12 m13 m14 m21 m22 m23 m24 m31 m32 m33 m34]
@@ -551,7 +559,6 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
       # determining the translation in Z and the sign of sigma
       gamma_sign = np.sign(m[2, 3])
-      gamma_sign = 1
 
       # due to the way we construct our viewing axis, we know that the objects must be IN FRONT of the camera, thus the translation must always be POSITIVE in the Z direction
       M = gamma_sign / gamma * m
@@ -723,6 +730,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     distanceErrors = np.reshape(distanceErrors, ((X.shape[1], 1)))
     return distanceErrors
 
+
   def AngularValidation(self, T, X, Q, A):
     """
     Hand Eye calibration angular validation
@@ -863,16 +871,6 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
           center = [i[0], i[1]]
 
         #check that no 3d coords from the optical tracker are repeated (if tracking is lost) and append appropriate values to lists
-        
-        #c = vtk.vtkMatrix4x4()
-        #slicer.util.getNode(Transforms).GetNthDataNode(count).GetMatrixTransformToWorld(c)
-        #x = c.GetElement(0, 3)
-        #y = c.GetElement(1, 3)
-        #z = c.GetElement(2, 3)
-
-        ## draw fiducials following spatial tracking for visual validation
-        #markupsNode = slicer.util.getNode("MarkupsFiducial")
-        #markupsNode.AddFiducial(x,y,z)
 
         #if else statement to deal with when no elements have yet been appended and thus checking if the last element of the list matches the one being appended results in an error
         if len(StylusTipCoordsX)>0:
@@ -914,8 +912,14 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleCentersOutput.txt")
     np.savetxt(_savePath, CircleCenters, delimiter =", ", newline = "\n \n")
 
+    # calibData = scipy.io.loadmat("C:/d/MatLabCode/calibData.mat")
+    #
+    # StylusTipCoords = calibData['P3D']
+    # CircleCenters = calibData['P2D']
+
+
     #set calibration method (make choosable in module eventually)
-    CalibrationMethod = 1
+    CalibrationMethod = 2
 
     #preform hand eye calibration
     if CalibrationMethod == 1:
@@ -923,9 +927,12 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       calibration = np.vstack((np.hstack((R,t)),[0,0,0,1]))
       print(calibration)
     elif CalibrationMethod == 2:
-      M_int_est, M_ext_est, M_proj, fre = cameraCombinedCalibration2(CircleCenters,StylusTipCoords)
+      M_int_est, M_ext_est, M_proj, fre = self.cameraCombinedCalibration2(CircleCenters,StylusTipCoords)
       calibration = M_ext_est
-      print(calibration)
+      #print(calibration)
+
+    #M_proj = newcameramtx @ np.hstack((R,t))
+    print(M_proj)
     
 
     print("")
