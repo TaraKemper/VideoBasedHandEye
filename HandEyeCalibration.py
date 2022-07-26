@@ -792,8 +792,10 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     Read through video frame by frame and analyze each using colour thresholding and hough transform
     same as original function except applying a binary mask after colour thresholding to improve accuracy of circle detection
     """
+    # get images (frames) recorded in slicer
     a = slicer.util.getNode(Frames)
 
+    # Create markup nodes to show 3d tracked data, make sure there is not already one created
     markupsNode = None
     try:
       markupsNode = slicer.util.getNode("HECFiducials")
@@ -803,6 +805,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       markupsNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode")
       markupsNode.SetName("HECFiducials")
 
+    # set up lists to save final 3d and 2d data (to be merged into 3xN and 2xN matricies later)
     StylusTipCoordsX = ([])
     StylusTipCoordsY = ([])
     StylusTipCoordsZ = ([])
@@ -810,11 +813,12 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     CircleCentersX = ([])
     CircleCentersY = ([])
 
+    # for ease using a hardcoded int matrix and dist coefficients as my setup is not changing, for any new setup must recalculate using distortion calibration function though
     #mtx, dist = self.logicDistortionCalibration("Checkerboards")
-    #mtx = np.array([[622.97040331 0. 322.60669888], [0. 619.81629638 239.44681572], [ 0. 0. 1. ])
-    mtx = np.array([[622.97040331, 0, 322.60669888], [0, 619.81629638, 239.44681572], [0, 0, 1]]);
+    mtx = np.array([[622.97040331, 0, 322.60669888], [0, 619.81629638, 239.44681572], [0, 0, 1]])
     dist = np.array([1.10517578e-01, -2.65829231e-01, -1.90690252e-05, 7.00236680e-05, 1.39000650e-01])
 
+    # count through frames and detect circle centers (2d points)
     for count in range(a.GetNumberOfDataNodes()):
       img = a.GetNthDataNode(count)
       img = slicer.util.arrayFromVolume(img)
@@ -847,7 +851,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       # save thresholded image (binary or blurred) which the hough transform is being applied to (check)
       _savePath = os.path.join(self.saveFolder, "OutputImages", "Undistortion", "frame"+str(count)+".png")
       cv2.imwrite(_savePath, blurred)
-        
+
+      # Get transform (3d points) data from slicer
       c = vtk.vtkMatrix4x4()
       slicer.util.getNode(Transforms).GetNthDataNode(count).GetMatrixTransformToWorld(c)
       x = c.GetElement(0, 3)
@@ -870,10 +875,9 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
           cv2.circle(img, (i[0], i[1]), 2, (0, 0, 255), 3)
           center = [i[0], i[1]]
 
-        #check that no 3d coords from the optical tracker are repeated (if tracking is lost) and append appropriate values to lists
-
         #if else statement to deal with when no elements have yet been appended and thus checking if the last element of the list matches the one being appended results in an error
         if len(StylusTipCoordsX)>0:
+          # check that no 3d coords from the optical tracker are repeated (if tracking is lost) and append appropriate values to lists
           if StylusTipCoordsX[len(StylusTipCoordsX)-1] == x:
             print("Spatial tracking lost in frame %d" % count)
           else:
@@ -903,7 +907,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
           _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleDetection", "frame"+str(count)+".png")
           cv2.imwrite(_savePath, img)
 
-    #Format input matricies and output rotation and translational calibration matrix
+    #Format input matricies and save to text files for easy access and analysis
     StylusTipCoords = np.vstack(( StylusTipCoordsX, StylusTipCoordsY, StylusTipCoordsZ))
     _savePath = os.path.join(self.saveFolder, "OutputImages", "StylusTipCoordsOutput.txt")
     np.savetxt(_savePath, StylusTipCoords, delimiter =", ", newline = "\n \n")
@@ -911,12 +915,6 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     CircleCenters = np.vstack(( CircleCentersX, CircleCentersY))
     _savePath = os.path.join(self.saveFolder, "OutputImages", "CircleCentersOutput.txt")
     np.savetxt(_savePath, CircleCenters, delimiter =", ", newline = "\n \n")
-
-    # calibData = scipy.io.loadmat("C:/d/MatLabCode/calibData.mat")
-    #
-    # StylusTipCoords = calibData['P3D']
-    # CircleCenters = calibData['P2D']
-
 
     #set calibration method (make choosable in module eventually)
     CalibrationMethod = 2
@@ -929,12 +927,12 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     elif CalibrationMethod == 2:
       M_int_est, M_ext_est, M_proj, fre = self.cameraCombinedCalibration2(CircleCenters,StylusTipCoords)
       calibration = M_ext_est
-      #print(calibration)
+      print(calibration)
 
     #M_proj = newcameramtx @ np.hstack((R,t))
-    print(M_proj)
-    
+    print(M_int_est)
 
+    # print all average errors
     print("")
 
     pixels,pixelErrors = self.PixelValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
@@ -945,6 +943,9 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
     angularErrors = self.AngularValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
     print("Average angular error:", "%.2f degrees" % (sum(angularErrors) / angularErrors.shape[0])[0])
+
+    # use calibration matrix to redraw circle centers using only 3d points (3d point x calibraton matrix = 2d point)overleaf as a visual validation
+    # try and except statement deals with the scenario where an index is skipped due to tracking (3d or 2d) being lost causing the indicies for circle detection images and pixels list becoming out of sync
 
     for i in range(len(pixels)):
       try:
