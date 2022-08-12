@@ -32,12 +32,11 @@ class HandEyeCalibration(ScriptedLoadableModule):
     # TODO: update with short description of the module and a link to online module documentation
     self.parent.helpText = """
 This is an example of scripted loadable module bundled in an extension.
-See more information in <a href="https://github.com/organization/projectname#HandEyeCalibration">module documentation</a>.
+See more information in <a href="https://github.com/TaraKemper/VideoBasedHandEye">module documentation</a>.
 """
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """
-This file was originally developed by Jean-Christophe Fillion-Robin, Kitware Inc., Andras Lasso, PerkLab,
-and Steve Pieper, Isomics, Inc. and was partially funded by NIH grant 3P41RR013218-12S1.
+This file was originally developed by Tara Kemper with help from Daniel Allen, Adam Rankin, Dr. Elvis Chen, and many other members of the VASST Lab
 """
 
     # Additional initialization step after application startup is complete
@@ -111,7 +110,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     self._parameterNode = None
     self._updatingGUIFromParameterNode = False
 
-    #############
+    ##########################################
     self.saveFolder = pathlib.Path(__file__).parent.resolve()
     # Create all necessary folders
     os.makedirs(os.path.join(self.saveFolder, "OutputImages"), exist_ok=True)
@@ -120,7 +119,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "UndistortedCheckerboards"), exist_ok=True)
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "Undistortion"), exist_ok=True)
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "CircleDetection"), exist_ok=True)
-    #############
+    ##########################################
 
   def UpdateTransforms(self, caller, event):
     print("TEST1")
@@ -154,28 +153,26 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
     # These connections ensure that whenever user changes some settings on the GUI, that is saved in the MRML scene
     # (in the selected parameter node).
-    +self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
-    self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
-    self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
-    self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    # +self.ui.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    # self.ui.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
+    # self.ui.imageThresholdSliderWidget.connect("valueChanged(double)", self.updateParameterNodeFromGUI)
+    # self.ui.invertOutputCheckBox.connect("toggled(bool)", self.updateParameterNodeFromGUI)
+    # self.ui.invertedOutputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.updateParameterNodeFromGUI)
 
     # Buttons
-    self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
+    # self.ui.applyButton.connect('clicked(bool)', self.onApplyButton)
     
     ##############################################
 
-    # self.ui.pushButton.connect('clicked(bool)', self.testFunction)
     self.ui.pushButton.connect('clicked(bool)', self.AnalyzeVideo)
     self.ui.DistortionButton.connect('clicked(bool)', self.DistortionCalibration)
-    self.ui.TemporalButton.connect('clicked(bool)', self.TemporalCalibration)
 
-    #self.ui.methodSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.)
+    # self.ui.IntMtxWidget.
     
     ##############################################
 
     # Make sure parameter node is initialized (needed for module reload)
-    self.initializeParameterNode()
+    # self.initializeParameterNode()
 
   def cleanup(self):
     """
@@ -318,8 +315,6 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
       import traceback
       traceback.print_exc()
 
-  def testFunction(self):
-    self.logic.logicTestFunction()
     
 ##########################################################################
   #
@@ -331,9 +326,6 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
 
   def DistortionCalibration(self):
     self.logic.logicDistortionCalibration("Checkerboards")
-
-  def TemporalCalibration(self):
-    self.logic.logicTemporalCalibration()
     
 ##########################################################################
 
@@ -367,19 +359,15 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     if not parameterNode.GetParameter("Invert"):
       parameterNode.SetParameter("Invert", "false")
 
-  def logicTestFunction(self):
-    print ("Logic goes here")
-
 #############################################################################################
   #
-  # Undistortion and Temporal
+  # Undistortion
   #
     
   def logicDistortionCalibration(self, Checkerboards):
     """
     Logic function to preform a distortion calibration for the camera
     """
-    print('got to distortion logic func')
     a = slicer.util.getNode(Checkerboards)
 
     # termination criteria
@@ -431,22 +419,27 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       _savePath = os.path.join(self.saveFolder, "OutputImages", "UndistortedCheckerboards", "frame"+str(count)+".png")
       cv2.imwrite(_savePath, img)
 
+    # fill in UI inputs with obtained intrinstic matrix and distortion coefficients values
+    mtxInput = slicer.modules.HandEyeCalibrationWidget.ui.IntMtxWidget
+    distInput = slicer.modules.HandEyeCalibrationWidget.ui.DistCoeffWidget
+
+    mtxInput.setValue(0, 0, mtx[0, 0])
+    mtxInput.setValue(0, 2, mtx[0, 2])
+    mtxInput.setValue(1, 1, mtx[1, 1])
+    mtxInput.setValue(1, 2, mtx[1, 2])
+
+    distInput.setValue(0, 0, dist[0, 0])
+    distInput.setValue(0, 1, dist[0, 1])
+    distInput.setValue(0, 2, dist[0, 2])
+    distInput.setValue(0, 3, dist[0, 3])
+    distInput.setValue(0, 4, dist[0, 4])
+
+    print("Instrinsic Matrix:")
+    print(mtx)
+    print("\nDistortion Coefficients:")
+    print(dist)
+
     return mtx, dist
-
-  def logicTemporalCalibration(self):
-    from scipy import signal
-
-    CircleCentersDict, StylusTipCoordsDict = self.logicAnalyzeVideo("Frames2", "Transforms2")
-
-    y1 = []
-    y2 = []
-
-    for i in range(len(CircleCentersDict)):
-      y1.append(CircleCentersDict[i][1])
-      y2.append(((StylusTipCoordsDict[i][0]*2.3)+385))
-
-    print(y1)
-    print(y2)
     
 ##############################################################################################
   #
@@ -813,10 +806,19 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     CircleCentersX = ([])
     CircleCentersY = ([])
 
-    # for ease using a hardcoded int matrix and dist coefficients as my setup is not changing, for any new setup must recalculate using distortion calibration function though
-    #mtx, dist = self.logicDistortionCalibration("Checkerboards")
-    mtx = np.array([[622.97040331, 0, 322.60669888], [0, 619.81629638, 239.44681572], [0, 0, 1]])
-    dist = np.array([1.10517578e-01, -2.65829231e-01, -1.90690252e-05, 7.00236680e-05, 1.39000650e-01])
+    # runs undistortion function every time and pulls intrinsic matrix and distortion coefficients from there
+    # mtx, dist = self.logicDistortionCalibration("Checkerboards")
+
+    # hardcoded intrinsic matrix and distortion coefficients (based on my setup)
+    # mtx = np.array([[622.97040331, 0, 322.60669888], [0, 619.81629638, 239.44681572], [0, 0, 1]])
+    # dist = np.array([1.10517578e-01, -2.65829231e-01, -1.90690252e-05, 7.00236680e-05, 1.39000650e-01])
+
+    #pulls intrinsic matrix and distortion coefficients from UI inputs --> inputted values will disappear any time the module is reloaded
+    mtxInput = slicer.modules.HandEyeCalibrationWidget.ui.IntMtxWidget
+    distInput =  slicer.modules.HandEyeCalibrationWidget.ui.DistCoeffWidget
+
+    mtx = np.array([[mtxInput.value(0,0), 0, mtxInput.value(0,2)], [0, mtxInput.value(1,1), mtxInput.value(1,2)], [0, 0, 1]])
+    dist = np.array([distInput.value(0,0), distInput.value(0,1), distInput.value(0,2), distInput.value(0,3), distInput.value(0,4)])
 
     # count through frames and detect circle centers (2d points)
     for count in range(a.GetNumberOfDataNodes()):
@@ -831,8 +833,8 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       img = cv2.undistort(img, mtx, dist, None, newcameramtx)
 
       ## save raw undistorted image (check)
-      #_savePath = os.path.join(self.saveFolder, "OutputImages", "Undistortion", "frame"+str(count)+".png")
-      #cv2.imwrite(_savePath, img)
+      # _savePath = os.path.join(self.saveFolder, "OutputImages", "Undistortion", "frame"+str(count)+".png")
+      # cv2.imwrite(_savePath, img)
 
       # Colour Threshold for green
       hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -850,7 +852,7 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
 
       # save thresholded image (binary or blurred) which the hough transform is being applied to (check)
       _savePath = os.path.join(self.saveFolder, "OutputImages", "Undistortion", "frame"+str(count)+".png")
-      cv2.imwrite(_savePath, blurred)
+      cv2.imwrite(_savePath, target)
 
       # Get transform (3d points) data from slicer
       c = vtk.vtkMatrix4x4()
@@ -917,9 +919,10 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
     np.savetxt(_savePath, CircleCenters, delimiter =", ", newline = "\n \n")
 
     #set calibration method (make choosable in module eventually)
-    CalibrationMethod = 2
+    CalibrationMethod = 1
 
     #preform hand eye calibration
+    print("\nExtrinsic Matrix:")
     if CalibrationMethod == 1:
       R,t = self.hand_eye_p2l(StylusTipCoords, CircleCenters, newcameramtx)
       calibration = np.vstack((np.hstack((R,t)),[0,0,0,1]))
@@ -929,14 +932,13 @@ class HandEyeCalibrationLogic(ScriptedLoadableModuleLogic):
       calibration = M_ext_est
       print(calibration)
 
+    #projection matrix = intrinsic matrix x extrinsic matrix
     #M_proj = newcameramtx @ np.hstack((R,t))
-    print(M_int_est)
+    # print(M_int_est)
 
     # print all average errors
-    print("")
-
     pixels,pixelErrors = self.PixelValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
-    print("Average pixel error:", "%.2f pixels" % (sum(pixelErrors)/pixelErrors.shape[0])[0])
+    print("\nAverage pixel error:", "%.2f pixels" % (sum(pixelErrors)/pixelErrors.shape[0])[0])
 
     distanceErrors = self.DistanceValidation(calibration, StylusTipCoords, CircleCenters, newcameramtx)
     print("Average distance error:", "%.2f mm" % (sum(distanceErrors) / distanceErrors.shape[0])[0])
