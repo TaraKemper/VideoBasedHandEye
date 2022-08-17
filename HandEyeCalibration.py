@@ -119,6 +119,29 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "UndistortedCheckerboards"), exist_ok=True)
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "Undistortion"), exist_ok=True)
     os.makedirs(os.path.join(self.saveFolder, "OutputImages", "CircleDetection"), exist_ok=True)
+
+
+    try:
+      slicer.util.getNode('Checkerboards')
+      slicer.util.getNode('Frames')
+      slicer.util.getNode('Transforms')
+    except:
+      # create a new sequence browser node
+      newSequenceBrowserNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSequenceBrowserNode', 'Undistortion')
+      # create a new sequence node
+      newSequenceNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSequenceNode', 'Checkerboards')
+      # pair the sequence browser node and the sequence node
+      newSequenceBrowserNode.AddSynchronizedSequenceNode(newSequenceNode.GetID())
+
+      # same for second sequence browser
+      newSequenceBrowserNode = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSequenceBrowserNode', 'Data Collection')
+      newSequenceNode1 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSequenceNode', 'Frames')
+      newSequenceNode2 = slicer.mrmlScene.AddNewNodeByClass('vtkMRMLSequenceNode', 'Transforms')
+      newSequenceBrowserNode.AddSynchronizedSequenceNode(newSequenceNode1.GetID())
+      newSequenceBrowserNode.AddSynchronizedSequenceNode(newSequenceNode2.GetID())
+
+
+
     ##########################################
 
   def UpdateTransforms(self, caller, event):
@@ -164,10 +187,10 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     
     ##############################################
 
+    # Connect Buttons
+
     self.ui.pushButton.connect('clicked(bool)', self.AnalyzeVideo)
     self.ui.DistortionButton.connect('clicked(bool)', self.DistortionCalibration)
-
-    # self.ui.IntMtxWidget.
     
     ##############################################
 
@@ -185,7 +208,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     Called each time the user opens this module.
     """
     # Make sure parameter node exists and observed
-    self.initializeParameterNode()
+    # self.initializeParameterNode()
 
   def exit(self):
     """
@@ -216,7 +239,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     # Parameter node stores all user choices in parameter values, node selections, etc.
     # so that when the scene is saved and reloaded, these settings are restored.
 
-    self.setParameterNode(self.logic.getParameterNode())
+    # self.setParameterNode(self.logic.getParameterNode())
 
     # Select default input nodes if nothing is selected yet to save a few clicks for the user
     if not self._parameterNode.GetNodeReference("InputVolume"):
@@ -243,7 +266,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
       self.addObserver(self._parameterNode, vtk.vtkCommand.ModifiedEvent, self.updateGUIFromParameterNode)
 
     # Initial GUI update
-    self.updateGUIFromParameterNode()
+    # self.updateGUIFromParameterNode()
 
   def updateGUIFromParameterNode(self, caller=None, event=None):
     """
@@ -258,7 +281,7 @@ class HandEyeCalibrationWidget(ScriptedLoadableModuleWidget, VTKObservationMixin
     self._updatingGUIFromParameterNode = True
 
     # Update node selectors and sliders
-    self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
+    # self.ui.inputSelector.setCurrentNode(self._parameterNode.GetNodeReference("InputVolume"))
     self.ui.outputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolume"))
     self.ui.invertedOutputSelector.setCurrentNode(self._parameterNode.GetNodeReference("OutputVolumeInverse"))
     self.ui.imageThresholdSliderWidget.value = float(self._parameterNode.GetParameter("Threshold"))
