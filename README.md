@@ -31,3 +31,13 @@ Usage Instructions:
 - In this sequence browser click the green + button twice, name the first new sequence "Frames" and choose Image_Referance as the proxy node, and name the second sequence "Transforms" and choose StylusTipToWebcam as the proxy node
 - Ensure optical tracker has a clear view of the reflective fiducials on both the webcam and stylus, then click the red dot to record a video of the stylus tip being moved around within the image frame. Move the stylus slowly, try and cover as much of the camera's visual field as possible, and try to record at various depths away from the camera
 - Back in the HandEyeCalibration module, click the Analyze button to return the extrinsic matrix, the average pixel, distance, and angular errors of all data points in that aquisition, as well as notifications for if tracking or circle detection was lost in any frames and which ones
+
+
+
+MatLab Analysis Code Usage Instructions:
+
+- Open all 4 files in a current version of MatLab (last run successfully on MATLAB R2022a - academic use)
+- In analysis.m, replace update variables P2D and P3D with correct file paths to the CircleCentersOutput.txt and StylusTipCoordsOutput.txt files in the OutputImages folder of the downloaded VideoBasedHandEye module on your machine, or the file path to saved versions of these text files from past runs of the module
+- Replace the GT_HE and GT_Mint variables with updated vesions of the hand eye and intrinsic matricies obtained from the desired run of the module, however these matricies are only used to seprate the data into the 27 sections so if the matricies are from a previous run of data with a similar setup that will be sufficient (the matricies don't need to be perfect the the run of data you are analyzing, but they do need to be close to not entirely throw off the sectioning process)
+- From here, you can simply run the analysis.m file, then the main.m file once that finished to obtain you box and whisker plot analysis of the desired data
+- Currently 5000 runs (nTest) are being used to offer a robust analysis of the data, but this will cause the code to take a few minutes to run. It is reccomended to lower this number when first using the code so errors can be detected and fixed quickly before doing a more complete run with the full 5000 itereations
