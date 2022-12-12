@@ -4,8 +4,8 @@ clear all;
 % add correct filepath for your computer to the CircleCentersOutput.txt
 % and StylusTipCoordsOutput.txt files for you desired dataset which are 
 % output to the OutputImages folder upon running the module
-P2D = dlmread('\\imagingsrv.robarts.ca\Peters_Users$\tkemper\Documents\Hand Eye Calibration\Slicer Module\Test Data\27 Regions Data\Test 5\CircleCentersOutput.txt'); 
-P3D = dlmread('\\imagingsrv.robarts.ca\Peters_Users$\tkemper\Documents\Hand Eye Calibration\Slicer Module\Test Data\27 Regions Data\Test 5\StylusTipCoordsOutput.txt');
+P2D = dlmread('C:\d\VideoBasedHandEye\OutputImages\CircleCentersOutput.txt'); 
+P3D = dlmread('C:\d\VideoBasedHandEye\OutputImages\StylusTipCoordsOutput.txt');
 
 % replace with output hand eye matrix for the desired dataset which will
 % print in slicer's python interactor window upon running the module
