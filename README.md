@@ -2,6 +2,11 @@
 
 A slicer module which preforms video based hand eye calibration of a system consisting of a webcam and optical tracker
 
+The link to the accompanying SPIE paper for this module can be found here:  https://doi.org/10.1117/12.2651160
+
+This module is open source and free to use, however a citation is always much appreciated!
+
+
 Download/Setup Instruction:
 
 - Create a copy of this repository on the local disk (C:) of your computer in the development file (D) or wherever else you see fit, and ensure all up to date versions of 3D Slicer and Plus Server Launcher are installed
